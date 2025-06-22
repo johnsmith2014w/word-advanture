@@ -1,0 +1,835 @@
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多功能单词练习</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap');
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .tab-btn {
+            transition: all 0.3s;
+        }
+        .tab-btn.active {
+            background-color: #3b82f6; /* blue-500 */
+            color: white;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        /* Common Styles */
+        .game-box {
+            background-color: white;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+        .word-display {
+            font-size: 1.5rem; /* text-2xl */
+            font-weight: 700;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            letter-spacing: 0.25em;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+        }
+        .word-display.start { background-color: #93c5fd; } /* blue-300 */
+        .word-display.end { background-color: #6ee7b7; } /* emerald-300 */
+        
+        /* Flashcard Styles */
+        .flashcard-container { perspective: 1000px; }
+        .flashcard { position: relative; width: 100%; height: 100%; transition: transform 0.6s; transform-style: preserve-3d; cursor: pointer; }
+        .flashcard.is-flipped { transform: rotateY(180deg); }
+        .flashcard-face { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; border-radius: 1.5rem; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); }
+        .flashcard-front { background-color: white; }
+        .flashcard-back { background-color: #374151; color: white; transform: rotateY(180deg); }
+        .word-text { font-size: clamp(3rem, 15vw, 4.5rem); font-weight: 700; }
+        .definition-text { font-size: clamp(1.25rem, 5vw, 1.5rem); }
+        .speak-btn { transition: color 0.2s; cursor:pointer; }
+        
+        /* Game Input Styles */
+        .game-input {
+            width: 8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.25em;
+            text-align: center;
+            font-weight: 700;
+            font-size: 1.5rem;
+            padding: 0.5rem 0;
+            border-radius: 0.5rem;
+            border: 2px solid #d1d5db;
+        }
+        .game-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+        }
+        .game-input.correct {
+            background-color: #dcfce7 !important; /* green-100 */
+            border-color: #22c55e !important; /* green-500 */
+            color: #166534 !important; /* green-800 */
+            box-shadow: 0 0 0 2px #22c55e44;
+            transition: background 0.3s, border 0.3s, color 0.3s;
+        }
+        .hint-btn {
+            background: none;
+            border: none;
+            color: #fbbf24; /* amber-400 */
+            cursor: pointer;
+            font-size: 1.5rem;
+        }
+
+        .riddle-step {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 0.5rem;
+            align-items: center;
+            margin: 0.75rem 0;
+        }
+        .riddle-clue {
+            font-size: 0.875rem;
+            color: #6b7280;
+            padding: 0.5rem;
+            background-color: #f3f4f6;
+            border-radius: 0.375rem;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .success-message { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <main class="w-full max-w-md mx-auto p-4 py-8">
+        <div id="ladder-reward-bar" class="fixed top-4 right-4 z-50 flex items-center gap-2 text-yellow-400 text-2xl font-bold select-none" style="pointer-events:none;">
+            <i class="fas fa-star"></i> <span id="ladder-star-count">0</span>
+        </div>
+        <!-- Tab Controls -->
+        <div class="mb-6 bg-gray-200 p-1 rounded-full grid grid-cols-4">
+            <button id="tab-flashcard" class="tab-btn active py-2 rounded-full font-semibold">单词卡片</button>
+            <button id="tab-ladder" class="tab-btn py-2 rounded-full font-semibold">单词阶梯</button>
+            <button id="tab-riddle" class="tab-btn py-2 rounded-full font-semibold">单词联想</button>
+            <button id="tab-spelling" class="tab-btn py-2 rounded-full font-semibold">拼写填空</button>
+        </div>
+
+        <!-- App Content -->
+        <div id="app-content">
+            <!-- App content will be injected here -->
+        </div>
+    </main>
+
+    <!-- Flashcard Template -->
+    <template id="flashcard-template">
+        <div class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">单词卡片练习</h1>
+            <p class="text-gray-500 mt-1">点击卡片翻转，点击喇叭朗读</p>
+        </div>
+        <div class="flashcard-container h-64 md:h-80">
+            <div id="flashcard" class="flashcard">
+                <div class="flashcard-face flashcard-front">
+                    <div class="flex items-center justify-center gap-x-4">
+                        <h2 id="word" class="word-text text-gray-900"></h2>
+                        <button id="speak-word-btn" class="speak-btn text-gray-400 hover:text-blue-500 text-3xl md:text-4xl"><i class="fas fa-volume-up"></i></button>
+                    </div>
+                </div>
+                <div class="flashcard-face flashcard-back">
+                    <p id="definition" class="definition-text text-center"></p>
+                    <button id="speak-definition-btn" class="speak-btn absolute bottom-4 right-5 text-gray-400 hover:text-white text-2xl"><i class="fas fa-volume-up"></i></button>
+                </div>
+            </div>
+        </div>
+        <div class="mt-6 text-center">
+            <p id="progress" class="text-lg font-semibold text-gray-700"></p>
+        </div>
+        <div class="mt-4 grid grid-cols-3 gap-4">
+            <button id="prev-btn" class="control-btn bg-white p-4 rounded-full shadow-md text-gray-700 text-2xl"><i class="fas fa-arrow-left"></i></button>
+            <button id="shuffle-btn" class="control-btn bg-blue-500 p-4 rounded-full shadow-lg text-white text-2xl"><i class="fas fa-random"></i></button>
+            <button id="next-btn" class="control-btn bg-white p-4 rounded-full shadow-md text-gray-700 text-2xl"><i class="fas fa-arrow-right"></i></button>
+        </div>
+    </template>
+
+    <!-- Word Ladder Template -->
+    <template id="ladder-template">
+         <div class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">单词阶梯游戏</h1>
+            <p class="text-gray-500 mt-1">每次改一个字母，从上到下连接单词</p>
+        </div>
+        <div class="game-box">
+            <div id="ladder-start-word" class="word-display start"></div>
+            <div id="ladder-steps" class="my-2"></div>
+            <div id="ladder-end-word" class="word-display end"></div>
+            <div id="ladder-message" class="text-center text-red-500 font-bold h-6 my-2"></div>
+            <div id="ladder-success-message" class="hidden text-center p-4 bg-green-100 text-green-700 rounded-lg">
+                <p class="font-bold text-lg">太棒了，挑战成功！</p>
+            </div>
+            <form id="ladder-form" class="mt-4 flex gap-2">
+                <input type="text" id="ladder-input" class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 game-input" placeholder="输入下一个单词..." autocomplete="off">
+                <button id="ladder-hint-btn" type="button" class="px-4 py-2 bg-amber-400 text-white font-semibold rounded-lg shadow-md hover:bg-amber-500"><i class="fas fa-lightbulb"></i></button>
+                <button type="submit" class="px-6 py-2 bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:bg-blue-600">提交</button>
+            </form>
+             <button id="new-ladder-game-btn" class="w-full mt-4 py-2 bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-800">换个挑战</button>
+        </div>
+    </template>
+
+    <!-- Word Riddle Template -->
+    <template id="riddle-template">
+        <div class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">单词联想游戏</h1>
+            <p class="text-gray-500 mt-1">根据线索猜出对应的单词</p>
+        </div>
+        <div class="game-box">
+            <div id="riddle-start-word" class="word-display start">
+                <span id="riddle-start-word-text"></span>
+                <button class="speak-btn text-gray-600 hover:text-blue-600 text-2xl"><i class="fas fa-volume-up"></i></button>
+            </div>
+            <div id="riddle-steps-container" class="my-2">
+                <!-- Riddle steps with clues will be generated here -->
+            </div>
+            <div id="riddle-end-word" class="word-display end">
+                <span id="riddle-end-word-text"></span>
+                 <button class="speak-btn text-gray-600 hover:text-green-600 text-2xl"><i class="fas fa-volume-up"></i></button>
+            </div>
+            <div id="riddle-success-message" class="hidden text-center p-4 my-4 bg-green-100 text-green-700 rounded-lg">
+                <p class="font-bold text-lg">太棒了，挑战成功！</p>
+                <p class="text-sm">即将开始下一个挑战...</p>
+            </div>
+            <button id="new-riddle-btn" class="w-full mt-4 py-3 bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-800">下一个挑战</button>
+        </div>
+    </template>
+
+    <!-- Spelling Fill-in Template -->
+    <template id="spelling-template">
+        <div class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">拼写填空</h1>
+            <p class="text-gray-500 mt-1">根据释义拼写出正确的英文单词</p>
+        </div>
+        <div class="game-box flex flex-col items-center">
+            <div class="mb-4 w-full">
+                <div class="text-lg font-semibold text-gray-700 text-center">释义：</div>
+                <div id="spelling-definition" class="text-xl text-blue-700 text-center my-2"></div>
+            </div>
+            <form id="spelling-form" class="flex flex-col items-center gap-4 w-full">
+                <input type="text" id="spelling-input" class="game-input w-full" placeholder="请输入英文单词..." autocomplete="off">
+                <div class="flex gap-2 justify-center">
+                    <button id="spelling-hint-btn" type="button" class="px-4 py-2 bg-amber-400 text-white font-semibold rounded-lg shadow-md hover:bg-amber-500"><i class="fas fa-lightbulb"></i> 提示</button>
+                    <button id="spelling-speak-btn" type="button" class="px-4 py-2 bg-blue-400 text-white font-semibold rounded-lg shadow-md hover:bg-blue-500"><i class="fas fa-volume-up"></i> 听写</button>
+                    <button type="submit" class="px-6 py-2 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600">提交</button>
+                </div>
+            </form>
+            <div id="spelling-message" class="text-center text-red-500 font-bold h-6 my-2"></div>
+            <div id="spelling-success-message" class="hidden text-center p-4 bg-green-100 text-green-700 rounded-lg mt-2">
+                <p class="font-bold text-lg">拼写正确！</p>
+            </div>
+            <div class="mt-4 text-center">
+                <p id="spelling-progress" class="text-lg font-semibold text-gray-700"></p>
+            </div>
+            <button id="spelling-next-btn" class="w-full mt-4 py-2 bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-800">下一个</button>
+        </div>
+    </template>
+
+    <script>
+        // ** UPDATED: Restored the full word list with definitions **
+        const flashcards = [
+            { word: "Sag", definition: "To sink, droop, or hang down." }, { word: "Tug", definition: "To pull something hard or suddenly." }, { word: "Tad", definition: "A very small amount." }, { word: "Bale", definition: "A large bundle of paper, hay, or cotton." }, { word: "Rock", definition: "A large mass of stone." }, { word: "Tack", definition: "A small sharp nail or a course of action." }, { word: "Dune", definition: "A hill of sand formed by the wind." }, { word: "Ton", definition: "A unit of weight equal to 2,000 pounds." }, { word: "Lane", definition: "A narrow road, especially in a rural area." }, { word: "Tone", definition: "A musical or vocal sound; quality of voice." }, { word: "Hire", definition: "To employ someone for wages." }, { word: "Hare", definition: "An animal like a large rabbit." }, { word: "Fare", definition: "The money a passenger on public transport has to pay." }, { word: "Fame", definition: "The state of being known by many people." }, { word: "Flame", definition: "The visible, gaseous part of a fire." }, { word: "Dine", definition: "To eat dinner." }, { word: "Tune", definition: "A melody." }, { word: "Bench", definition: "A long seat for several people." }, { word: "Bunch", definition: "A number of things growing or fastened together." }, { word: "Pant", definition: "To breathe with short, quick breaths; a pair of trousers." }, { word: "Pork", definition: "Meat from a pig." }, { word: "Port", definition: "A city with a harbor where ships load or unload." }, { word: "Tame", definition: "Domesticated; not dangerous." }, { word: "Seep", definition: "To flow or leak slowly through porous material." }, { word: "Clod", definition: "A lump of earth or clay." }, { word: "Weed", definition: "A wild plant growing where it is not wanted." }, { word: "Bail", definition: "Release of a prisoner on payment; or, to scoop water out." }, { word: "Pail", definition: "A bucket." }, { word: "Stare", definition: "To look for a long time with the eyes wide open." }, { word: "Rack", definition: "A frame for holding or storing things." }, { word: "Mope", definition: "To be dejected and gloomy." }, { word: "Tow", definition: "To pull a vehicle or boat with a rope or chain." }, { word: "Pale", definition: "Light in color or shade." }, { word: "Bare", definition: "Unclothed or uncovered." }, { word: "Bore", definition: "To make a hole; or, to make someone feel uninterested." }, { word: "Mole", definition: "A small burrowing mammal." }, { word: "Phony", definition: "Not genuine; fraudulent." }, { word: "Done", definition: "Finished or completed." }, { word: "Dose", definition: "A quantity of a medicine or drug taken at a particular time." }, { word: "Bull", definition: "An uncastrated male bovine animal." }, { word: "Full", definition: "Containing or holding as much or as many as possible." }, { word: "Dull", definition: "Lacking interest or excitement." }, { word: "Hem", definition: "The edge of a piece of cloth, folded over and sewn." }, { word: "Pest", definition: "A destructive insect or animal that attacks crops." }, { word: "Tale", definition: "A fictitious or true narrative or story." }, { word: "Bet", definition: "To risk something, usually a sum of money, on the outcome of a future event." }, { word: "Low", definition: "Of less than average height from top to bottom." }, { word: "Slim", definition: "Gracefully thin." }, { word: "Cram", definition: "To force (something) into a space that is too small." }, { word: "Wee", definition: "Little; very small." }, { word: "Gut", definition: "The stomach or intestine." }, { word: "Limb", definition: "An arm, leg, or wing." }, { word: "Sod", definition: "The surface of the ground, with the grass growing on it." }, { word: "Pout", definition: "To push one's lips forward in annoyance." }, { word: "Clan", definition: "A group of close-knit families." }, { word: "Cope", definition: "To deal effectively with something difficult." }, { word: "Drown", definition: "To die through submersion in water." }, { word: "Drop", definition: "To let something fall vertically." }, { word: "Grate", definition: "To shred food into small pieces." }, { word: "Great", definition: "Considerably above the normal or average." }, { word: "Tar", definition: "A dark, thick, flammable liquid distilled from wood or coal." }, { word: "Heal", definition: "To become sound or healthy again." }, { word: "Grim", definition: "Forbidding or uninviting." }, { word: "Grin", definition: "A broad smile." }, { word: "Sliver", definition: "A small, thin piece cut off a larger piece." }, { word: "Peep", definition: "A quick or furtive look." }, { word: "Pep", definition: "Energy and high spirits; liveliness." }, { word: "Bran", definition: "Pieces of grain husk from flour milling." }, { word: "Toll", definition: "A charge to use a bridge or road." }, { word: "Worn", definition: "Damaged and shabby from much use." }, { word: "Sling", definition: "A strap used to support or raise a weight." }, { word: "Simmer", definition: "To stay just below boiling point while heated." },
+            { word: "Scat", definition: "To go away quickly." }, { word: "Mast", definition: "A tall upright post on a boat supporting sails." }, { word: "Cask", definition: "A large barrel-like container made of wood, metal, or plastic." }, { word: "Harm", definition: "Physical injury." }, { word: "Rut", definition: "A long deep track made by wheels." }, { word: "Wit", definition: "Inventive thought and quick understanding." }, { word: "Flop", definition: "To fall or move in a clumsy way." }, { word: "Fob", definition: "A chain attached to a watch for carrying in a waistcoat or pocket." }, { word: "Flo", definition: "A feminine given name." }, { word: "Lop", definition: "To cut off (a branch, limb, or twig) from the main body of a tree." }, { word: "Pair", definition: "A set of two things used together or regarded as a unit." }, { word: "Pait", definition: "A Scottish term for a pet or favorite." }, { word: "Chant", definition: "A repeated rhythmic phrase." }, { word: "Tart", definition: "An open pastry case containing a filling." }, { word: "Haste", definition: "Excessive speed or urgency." }, { word: "Shoot", definition: "To fire a gun or other weapon." }, { word: "Shed", definition: "A simple roofed structure for storage." }, { word: "Sled", definition: "A vehicle on runners for conveying loads or passengers over snow or ice." }, { word: "Chirp", definition: "A short, sharp sound from a small bird or insect." }, { word: "Cent", definition: "A monetary unit equal to one hundredth of a dollar." }, { word: "Moat", definition: "A deep, wide ditch surrounding a castle." }, { word: "Plank", definition: "A long, thin, flat piece of timber." }, { word: "Bass", definition: "A low musical sound; or, a type of fish." }, { word: "Seem", definition: "To give the impression of being something." }, { word: "Seam", definition: "A line where two pieces of fabric are sewn together." }, { word: "Pire", definition: "A pier or jetty." }, { word: "Loot", definition: "Goods taken from an enemy in war." }, { word: "Stalk", definition: "The main stem of a plant; or, to follow someone secretly." }, { word: "Runt", definition: "The smallest or weakest of a litter." }, { word: "Wool", definition: "The fine hair forming the coat of a sheep." },
+            { word: "Wood", definition: "The hard fibrous material of a tree." }, { word: "Hang", definition: "To suspend from above with the lower part free." }, { word: "Sang", definition: "Past tense of sing." }, { word: "Coop", definition: "A cage or pen for poultry." }, { word: "Slop", definition: "To spill over the edge of a container." }, { word: "Sole", definition: "The undersurface of a person's foot." }, { word: "Sold", definition: "Past tense of sell." }, { word: "Spat", definition: "A slight quarrel." }, { word: "Spalt", definition: "Wood that is colored by fungus." }, { word: "Steam", definition: "The vapor into which water is converted when heated." }, { word: "Health", definition: "The state of being free from illness or injury." }, { word: "Stealthy", definition: "Behaving in a cautious, surreptitious manner." }, { word: "Ripe", definition: "Fully developed and ready to be eaten or used." }, { word: "Rum", definition: "An alcoholic spirit." }, { word: "Boom", definition: "A loud, deep, resonant sound." }, { word: "Sore", definition: "Painful or aching." }, { word: "Cord", definition: "A thick string or thin rope." }, { word: "Lag", definition: "To fall behind in movement, progress, or development." }, { word: "Pappy", definition: "Resembling pap; soft or mushy." }, { word: "Sappy", definition: "Excessively sentimental; mushy." }, { word: "Lad", definition: "A boy or young man." }, { word: "Mutt", definition: "A dog of mixed or uncertain breed." }, { word: "Butt", definition: "To strike with the head or horns." }, { word: "Crowd", definition: "A large number of people gathered together." }, { word: "Fang", definition: "A large sharp tooth." }, { word: "Mend", definition: "To repair something that is broken or damaged." }, { word: "Being", definition: "Existence." }, { word: "Loop", definition: "A shape produced by a curve that bends round and crosses itself." }, { word: "Polo", definition: "A game played on horseback." }, { word: "Imp", definition: "A small, mischievous devil or sprite." }, { word: "Limp", definition: "To walk with difficulty." }, { word: "Wavy", definition: "Having a series of curves." }, { word: "Poke", definition: "To jab with one's finger or a sharp object." },
+            { word: "Mate", definition: "A friend or companion." }, { word: "Date", definition: "A particular day of the month or year." }, { word: "Gate", definition: "A hinged barrier used to close an opening in a wall or fence." }, { word: "Fate", definition: "The development of events beyond a person's control." }, { word: "Cold", definition: "Of or at a low or relatively low temperature." }, { word: "Gold", definition: "A yellow precious metal." }, { word: "Bold", definition: "Showing an ability to take risks; confident and courageous." }, { word: "Hold", definition: "Grasp, carry, or support with one's hands." }, { word: "Sand", definition: "A loose granular substance, typically pale yellowish brown." }, { word: "Band", definition: "A flat, thin strip or loop of material." }, { word: "Hand", definition: "The end part of a person's arm beyond the wrist." }, { word: "Land", definition: "The part of the earth's surface that is not covered by water." }, { word: "Lake", definition: "A large area of water surrounded by land." }, { word: "Make", definition: "Form (something) by putting parts together or combining substances." }, { word: "Take", definition: "Lay hold of (something) with one's hands; reach for and hold." }, { word: "Fake", definition: "Not genuine; a forgery or sham." }, { word: "Read", definition: "Look at and comprehend the meaning of (written or printed matter)." }, { word: "Lead", definition: "Be in charge or command of." }, { word: "Bead", definition: "A small piece of glass, stone, or similar material, that is threaded with others to make a necklace or rosary." }, { word: "Deck", definition: "A floor of a ship." }, { word: "Peck", definition: "(of a bird) strike or bite something with its beak." }, { word: "Neck", definition: "The part of a person's or animal's body connecting the head to the rest of the body." }, { word: "Duck", definition: "A waterfowl with a broad blunt bill, short legs, and webbed feet." }, { word: "Luck", definition: "Success or failure apparently brought by chance rather than through one's own actions." }, { word: "Tuck", definition: "Push, fold, or turn (the edges of something, especially a piece of clothing or bedding) so as to hide them or hold them in place." }, { word: "Wind", definition: "The perceptible natural movement of the air." }, { word: "Find", definition: "Discover or perceive by chance or unexpectedly." }, { word: "Mind", definition: "The element of a person that enables them to be aware of the world and their experiences." }, { word: "Kind", definition: "Having or showing a friendly, generous, and considerate nature." }, { word: "Cat", definition: "A small domesticated carnivorous mammal with soft fur." }, { word: "Bat", definition: "A mainly nocturnal mammal capable of sustained flight." }, { word: "Rat", definition: "A rodent that resembles a large mouse." }, { word: "Hat", definition: "A shaped covering for the head worn for warmth, as a fashion item, or as part of a uniform." }, { word: "Fat", definition: "A natural oily or greasy substance occurring in animal bodies." }, { word: "Sun", definition: "The star round which the earth orbits." }, { word: "Fun", definition: "Enjoyment, amusement, or lighthearted pleasure." }, { word: "Run", definition: "Move at a speed faster than a walk." }, { word: "Gun", definition: "A weapon incorporating a metal tube from which bullets are propelled at high speed." }, { word: "Pen", definition: "An instrument for writing or drawing with ink." }, { word: "Ten", definition: "Equivalent to the product of two and five; one more than nine; 10." }, { word: "Hen", definition: "A female bird, especially of a domestic fowl." }, { word: "Pig", definition: "An omnivorous domesticated hoofed mammal with sparse bristly hair and a flat snout." }, { word: "Big", definition: "Of considerable size, extent, or intensity." }, { word: "Dig", definition: "Break up and move earth with a tool or machine." }, { word: "Wig", definition: "A covering for the head made of real or artificial hair." }, { word: "Car", definition: "A road vehicle, typically with four wheels, powered by an internal combustion engine or electric motor." }, { word: "Jar", definition: "A wide-mouthed cylindrical container made of glass or pottery." }, { word: "Bar", definition: "A long rigid piece of wood, metal, or similar material." }, { word: "Far", definition: "Over a large expanse of space or time." }
+        ];
+
+        // --- Global App State ---
+        const tabFlashcard = document.getElementById('tab-flashcard');
+        const tabLadder = document.getElementById('tab-ladder');
+        const tabRiddle = document.getElementById('tab-riddle');
+        const tabSpelling = document.getElementById('tab-spelling');
+        const appContent = document.getElementById('app-content');
+        const flashcardTemplate = document.getElementById('flashcard-template');
+        const ladderTemplate = document.getElementById('ladder-template');
+        const riddleTemplate = document.getElementById('riddle-template');
+        const spellingTemplate = document.getElementById('spelling-template');
+        const wordToDefinition = new Map(flashcards.map(f => [f.word.toUpperCase(), f.definition]));
+        const wordsByLength = flashcards.reduce((acc, card) => {
+            const len = card.word.length;
+            if (!acc[len]) acc[len] = [];
+            acc[len].push(card.word.toUpperCase());
+            return acc;
+        }, {});
+
+        // --- Shared Functions ---
+        function speakText(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US';
+                utterance.rate = 0.9;
+                window.speechSynthesis.speak(utterance);
+            } else {
+                alert('抱歉，您的浏览器不支持语音朗读功能。');
+            }
+        }
+
+        // --- Tab Management ---
+        function showFlashcardApp() {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            tabFlashcard.classList.add('active');
+            appContent.innerHTML = flashcardTemplate.innerHTML;
+            initFlashcard();
+        }
+        function showLadderApp() {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            tabLadder.classList.add('active');
+            appContent.innerHTML = ladderTemplate.innerHTML;
+            initLadder();
+        }
+        function showRiddleApp() {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            tabRiddle.classList.add('active');
+            appContent.innerHTML = riddleTemplate.innerHTML;
+            initRiddle();
+        }
+        function showSpellingApp() {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            tabSpelling.classList.add('active');
+            appContent.innerHTML = spellingTemplate.innerHTML;
+            initSpelling();
+        }
+        tabFlashcard.addEventListener('click', showFlashcardApp);
+        tabLadder.addEventListener('click', showLadderApp);
+        tabRiddle.addEventListener('click', showRiddleApp);
+        tabSpelling.addEventListener('click', showSpellingApp);
+
+        // --- Word Ladder Logic ---
+        function initLadder() {
+            const startWordEl = document.getElementById('ladder-start-word');
+            const endWordEl = document.getElementById('ladder-end-word');
+            const stepsContainer = document.getElementById('ladder-steps');
+            const messageEl = document.getElementById('ladder-message');
+            const successMessageEl = document.getElementById('ladder-success-message');
+            const form = document.getElementById('ladder-form');
+            const inputEl = document.getElementById('ladder-input');
+            const newGameBtn = document.getElementById('new-ladder-game-btn');
+            const hintBtn = document.getElementById('ladder-hint-btn');
+            const rewardBar = document.getElementById('ladder-reward-bar');
+            const starCountEl = document.getElementById('ladder-star-count');
+            let starCount = 0;
+            const rewardMessages = [
+                '太棒了，获得一颗星星！',
+                '干得漂亮！再接再厉！',
+                '你真厉害！',
+                'Excellent!',
+                'Amazing! Keep going!',
+                'Nice work!'
+            ];
+
+            let path = null;
+            let clues = null;
+            let currentStep = 1; // 0为起点，1~3为中间，4为终点
+
+            // 生成严格5个单词的阶梯谜题，且每个单词都有释义
+            function generateLadderPuzzle() {
+                const lengths = Object.keys(wordsByLength).filter(len => wordsByLength[len].length >= 10);
+                if (lengths.length === 0) return null;
+                const randomLength = lengths[Math.floor(Math.random() * lengths.length)];
+                const wordPool = wordsByLength[randomLength];
+                let tries = 0;
+                while (tries < 2000) {
+                    tries++;
+                    let startWord = wordPool[Math.floor(Math.random() * wordPool.length)];
+                    let queue = [[startWord]];
+                    while(queue.length > 0) {
+                        let currentPath = queue.shift();
+                        let lastWord = currentPath[currentPath.length - 1];
+                        if(currentPath.length === 5) {
+                            // 确保每个单词都有释义且首尾不一样
+                            if(currentPath[0] !== currentPath[4] && currentPath.every(w => wordToDefinition.has(w))) {
+                                return currentPath;
+                            }
+                        }
+                        if(currentPath.length >= 5) continue;
+                        let neighbors = wordPool.filter(w => !currentPath.includes(w) && isOneLetterApart(w, lastWord) && wordToDefinition.has(w));
+                        for(const neighbor of neighbors) {
+                            queue.push([...currentPath, neighbor]);
+                        }
+                    }
+                }
+                return null;
+            }
+
+            function isOneLetterApart(word1, word2) {
+                if (word1.length !== word2.length) return false;
+                let diff = 0;
+                for (let i = 0; i < word1.length; i++) {
+                    if (word1[i] !== word2[i]) diff++;
+                }
+                return diff === 1;
+            }
+
+            function startNewGame() {
+                path = generateLadderPuzzle();
+                if(!path) {
+                    stepsContainer.innerHTML = "<p>无法生成谜题。</p>";
+                    form.style.display = 'none';
+                    return;
+                }
+                clues = path.map(w => wordToDefinition.get(w));
+                currentStep = 1;
+                // UI渲染
+                startWordEl.textContent = path[0];
+                endWordEl.textContent = path[4];
+                inputEl.maxLength = path[0].length;
+                stepsContainer.innerHTML = '';
+                messageEl.textContent = '';
+                successMessageEl.classList.add('hidden');
+                form.style.display = 'none'; // 隐藏原表单
+                // 渲染每步输入框和clue
+                for (let i = 1; i < 4; i++) {
+                    const stepDiv = document.createElement('div');
+                    stepDiv.className = 'riddle-step';
+                    // clue
+                    const clueEl = document.createElement('div');
+                    clueEl.className = 'riddle-clue';
+                    clueEl.innerHTML = `<span>线索: ${clues[i]}</span> <button class="speak-btn text-gray-400 hover:text-blue-500"><i class="fas fa-volume-up"></i></button>`;
+                    clueEl.querySelector('button').onclick = (e) => {
+                        e.stopPropagation();
+                        speakText(clues[i]);
+                    };
+                    // input
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'game-input';
+                    input.maxLength = path[0].length;
+                    input.dataset.step = i;
+                    input.placeholder = `第${i+1}个单词...`;
+                    // hint
+                    const hintBtn = document.createElement('button');
+                    hintBtn.className = 'hint-btn';
+                    hintBtn.innerHTML = '<i class="fas fa-lightbulb"></i>';
+                    hintBtn.onclick = () => showHint(i, input);
+                    // 事件
+                    input.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') checkStep(i, input);
+                    });
+                    input.addEventListener('input', function(e) {
+                        if (e.target.value.trim().toUpperCase() === path[i]) {
+                            checkStep(i, input);
+                        }
+                    });
+                    stepDiv.appendChild(clueEl);
+                    stepDiv.appendChild(input);
+                    stepDiv.appendChild(hintBtn);
+                    stepsContainer.appendChild(stepDiv);
+                }
+                // focus第一个输入框
+                stepsContainer.querySelector('input[data-step="1"]').focus();
+            }
+
+            function showHint(step, inputEl) {
+                const answer = path[step];
+                // 随机显示一个字母
+                let unrevealed = [];
+                let val = inputEl.value.toUpperCase();
+                for (let i = 0; i < answer.length; i++) {
+                    if (!val[i] || val[i] !== answer[i]) unrevealed.push(i);
+                }
+                if (unrevealed.length === 0) return;
+                let idx = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+                let arr = val.split('');
+                while (arr.length < answer.length) arr.push('');
+                arr[idx] = answer[idx];
+                inputEl.value = arr.join('');
+            }
+
+            function checkStep(step, inputEl) {
+                const prevWord = path[step-1];
+                const answer = path[step];
+                const userInput = inputEl.value.trim().toUpperCase();
+                inputEl.classList.remove('correct', 'border-red-400');
+                messageEl.textContent = '';
+                if (!isOneLetterApart(prevWord, userInput)) {
+                    messageEl.textContent = `❌ 必须只变一个字母！`;
+                    inputEl.classList.add('border-red-400');
+                    return;
+                }
+                if (!(wordsByLength[userInput.length] || []).includes(userInput)) {
+                    messageEl.textContent = `❌ 这不是有效单词！`;
+                    inputEl.classList.add('border-red-400');
+                    return;
+                }
+                if (userInput !== answer) {
+                    messageEl.textContent = `❌ 不是正确答案，请根据释义和前一个单词再试试！`;
+                    inputEl.classList.add('border-red-400');
+                    return;
+                }
+                inputEl.classList.add('correct');
+                inputEl.disabled = true;
+                messageEl.textContent = '✅ 正确！';
+                speakText('great');
+                // 自动跳到下一个输入框
+                const nextInput = stepsContainer.querySelector(`input[data-step='${step+1}']`);
+                if (nextInput) {
+                    setTimeout(() => {
+                        messageEl.textContent = '';
+                        nextInput.focus();
+                    }, 600);
+                } else {
+                    // 最后一格，显示成功
+                    setTimeout(() => {
+                        messageEl.textContent = '';
+                        // 奖励动画
+                        addStarReward();
+                        // 随机鼓励语
+                        const msg = rewardMessages[Math.floor(Math.random()*rewardMessages.length)];
+                        successMessageEl.innerHTML = `
+                            <div class="flex flex-col items-center">
+                                <div class="animate-bounce mb-2"><i class="fas fa-star text-5xl text-yellow-400 drop-shadow-lg"></i></div>
+                                <p class="font-bold text-lg text-yellow-700">${msg}</p>
+                                <p class="text-green-700 text-base">即将开始下一个挑战...</p>
+                            </div>
+                        `;
+                        successMessageEl.classList.remove('hidden');
+                        setTimeout(startNewGame, 2000);
+                    }, 600);
+                }
+            }
+
+            function addStarReward() {
+                starCount++;
+                localStorage.setItem('ladderStarCount', starCount);
+                starCountEl.textContent = starCount;
+            }
+
+            newGameBtn.addEventListener('click', startNewGame);
+            hintBtn.addEventListener('click', () => {
+                // 默认给当前未完成的输入框提示
+                const inputs = stepsContainer.querySelectorAll('input');
+                for (let i = 0; i < inputs.length; i++) {
+                    if (!inputs[i].disabled) {
+                        showHint(Number(inputs[i].dataset.step), inputs[i]);
+                        break;
+                    }
+                }
+            });
+            startNewGame();
+        }
+
+        // --- Word Riddle Logic ---
+        function initRiddle() {
+            const extraWords = [
+                {word: "SAME", definition: "Identical; not different."}, {word: "SACK", definition: "A large bag made of a strong material."}, {word: "SOCK", definition: "A garment for the foot and lower part of the leg."}, {word: "HARD", definition: "Solid, firm, and resistant to pressure."}, {word: "CARD", definition: "A piece of thick, stiff paper or thin pasteboard."}, {word: "MORE", definition: "A greater or additional amount or degree."}, {word: "SONG", definition: "A short poem or other set of words set to music."}, {word: "GAIN", definition: "Obtain or secure (something desired)."}, {word: "PAIN", definition: "Physical suffering or discomfort caused by illness or injury."}, {word: "PLAN", definition: "A detailed proposal for doing or achieving something."}, {word: "BLANK", definition: "A space left to be filled in a document."}, {word: "TEAM", definition: "A group of players forming one side in a competitive game or sport."}, {word: "SWIM", definition: "Propel the body through water by using the limbs."}, {word: "BEND", definition: "Shape or force (something) into a curve or angle."}, {word: "BAND", definition: "A flat, thin strip or loop of material."}, {word: "BEAN", definition: "An edible seed, typically kidney-shaped, growing in long pods."}, {word: "FEED", definition: "Give food to."}, {word: "FEET", definition: "Plural of foot."}, {word: "MEET", definition: "Arrange or happen to come into the presence or company of (someone)."}, {word: "MELT", definition: "Make or become liquefied by heat."}, {word: "COOL", definition: "Of or at a fairly low temperature."}, {word: "CROP", definition: "A cultivated plant that is grown as food."}
+            ];
+            extraWords.forEach(w => {
+                if (!wordToDefinition.has(w.word.toUpperCase())) {
+                    flashcards.push(w);
+                    wordToDefinition.set(w.word.toUpperCase(), w.definition);
+                }
+            });
+
+            // --- 动态生成谜题链 ---
+            function generateRiddleChain(chainLength = 5) {
+                const lengths = Object.keys(wordsByLength).filter(len => wordsByLength[len].length >= 10);
+                if (lengths.length === 0) return null;
+                const randomLength = lengths[Math.floor(Math.random() * lengths.length)];
+                const wordPool = wordsByLength[randomLength];
+                let tries = 0;
+                while (tries < 2000) {
+                    tries++;
+                    let startWord = wordPool[Math.floor(Math.random() * wordPool.length)];
+                    let queue = [[startWord]];
+                    while(queue.length > 0) {
+                        let currentPath = queue.shift();
+                        let lastWord = currentPath[currentPath.length - 1];
+                        if(currentPath.length === chainLength) {
+                            // 确保每个单词都有释义且首尾不一样
+                            if(currentPath[0] !== currentPath[chainLength-1] && currentPath.every(w => wordToDefinition.has(w))) {
+                                return currentPath;
+                            }
+                        }
+                        if(currentPath.length >= chainLength) continue;
+                        let neighbors = wordPool.filter(w => !currentPath.includes(w) && isOneLetterApart(w, lastWord) && wordToDefinition.has(w));
+                        for(const neighbor of neighbors) {
+                            queue.push([...currentPath, neighbor]);
+                        }
+                    }
+                }
+                return null;
+            }
+
+            function isOneLetterApart(word1, word2) {
+                if (word1.length !== word2.length) return false;
+                let diff = 0;
+                for (let i = 0; i < word1.length; i++) {
+                    if (word1[i] !== word2[i]) diff++;
+                }
+                return diff === 1;
+            }
+
+            // --- 记录最近10次谜题链 ---
+            let recentPuzzles = [];
+
+            let currentPuzzle;
+            let totalSteps, correctSteps;
+
+            const startWordEl = document.getElementById('riddle-start-word');
+            const endWordEl = document.getElementById('riddle-end-word');
+            const stepsContainer = document.getElementById('riddle-steps-container');
+            const successMessageEl = document.getElementById('riddle-success-message');
+            const newRiddleBtn = document.getElementById('new-riddle-btn');
+
+            function startNewRiddle() {
+                // 动态生成且避免最近10次重复
+                let chain = null;
+                let chainStr = '';
+                let maxTries = 100;
+                while (maxTries-- > 0) {
+                    chain = generateRiddleChain(5);
+                    if (!chain) break;
+                    chainStr = chain.join('-');
+                    if (!recentPuzzles.includes(chainStr)) break;
+                }
+                if (!chain) {
+                    stepsContainer.innerHTML = '<p>无法生成谜题。</p>';
+                    return;
+                }
+                // 记录本次
+                recentPuzzles.push(chainStr);
+                if (recentPuzzles.length > 10) recentPuzzles.shift();
+                currentPuzzle = { steps: chain };
+                totalSteps = currentPuzzle.steps.length - 2;
+                correctSteps = 0;
+
+                const startWord = currentPuzzle.steps[0];
+                const endWord = currentPuzzle.steps[currentPuzzle.steps.length - 1];
+
+                const startWordText = document.getElementById('riddle-start-word-text');
+                const speakStartWordBtn = startWordEl.querySelector('.speak-btn');
+                startWordText.textContent = startWord;
+                speakStartWordBtn.onclick = () => speakText(startWord);
+                
+                const endWordText = document.getElementById('riddle-end-word-text');
+                const speakEndWordBtn = endWordEl.querySelector('.speak-btn');
+                endWordText.textContent = endWord;
+                speakEndWordBtn.onclick = () => speakText(endWord);
+                
+                successMessageEl.classList.add('hidden');
+                stepsContainer.innerHTML = '';
+                newRiddleBtn.disabled = false;
+
+                for (let i = 1; i < currentPuzzle.steps.length - 1; i++) {
+                    const word = currentPuzzle.steps[i];
+                    const clue = wordToDefinition.get(word) || "一个神秘的单词...";
+                    
+                    const stepDiv = document.createElement('div');
+                    stepDiv.className = 'riddle-step';
+                    
+                    const clueEl = document.createElement('div');
+                    clueEl.className = 'riddle-clue';
+                    clueEl.innerHTML = `<span>线索: ${clue}</span> <button class="speak-btn text-gray-400 hover:text-blue-500"><i class="fas fa-volume-up"></i></button>`;
+                    clueEl.querySelector('button').onclick = (e) => {
+                        e.stopPropagation();
+                        speakText(clue);
+                    };
+
+                    const inputEl = document.createElement('input');
+                    inputEl.type = 'text';
+                    inputEl.className = 'game-input';
+                    inputEl.maxLength = word.length;
+                    inputEl.dataset.answer = word;
+                    inputEl.dataset.step = i;
+                    inputEl.addEventListener('input', handleInput);
+
+                    const hintBtn = document.createElement('button');
+                    hintBtn.className = 'hint-btn';
+                    hintBtn.innerHTML = '<i class="fas fa-lightbulb"></i>';
+                    hintBtn.onclick = () => showHint(inputEl, word);
+                    
+                    stepDiv.appendChild(clueEl);
+                    stepDiv.appendChild(inputEl);
+                    stepDiv.appendChild(hintBtn);
+                    stepsContainer.appendChild(stepDiv);
+                }
+                stepsContainer.querySelector('input')?.focus();
+            }
+            
+            function showHint(inputEl, answer) {
+                if(inputEl.disabled) return;
+                let hintIndex = Math.floor(Math.random() * answer.length);
+                let hintedValue = inputEl.value.split('');
+                while(hintedValue.length < answer.length) hintedValue.push('');
+                hintedValue[hintIndex] = answer[hintIndex];
+                inputEl.value = hintedValue.join('');
+            }
+
+            function handleInput(e) {
+                const input = e.target;
+                const answer = input.dataset.answer;
+                
+                if (input.value.toUpperCase() === answer) {
+                    input.classList.add('correct');
+                    input.disabled = true;
+                    correctSteps++;
+
+                    const nextStep = parseInt(input.dataset.step) + 1;
+                    const nextInput = stepsContainer.querySelector(`input[data-step='${nextStep}']`);
+                    if (nextInput) {
+                        nextInput.focus();
+                    } else if (correctSteps >= totalSteps) {
+                        successMessageEl.classList.remove('hidden');
+                        newRiddleBtn.disabled = true; 
+                        setTimeout(startNewRiddle, 2000); 
+                    }
+                }
+            }
+            
+            newRiddleBtn.addEventListener('click', startNewRiddle);
+            startNewRiddle();
+        }
+
+        // --- Spelling Fill-in Logic ---
+        function initSpelling() {
+            const definitionEl = document.getElementById('spelling-definition');
+            const inputEl = document.getElementById('spelling-input');
+            const form = document.getElementById('spelling-form');
+            const messageEl = document.getElementById('spelling-message');
+            const successMessageEl = document.getElementById('spelling-success-message');
+            const nextBtn = document.getElementById('spelling-next-btn');
+            const hintBtn = document.getElementById('spelling-hint-btn');
+            const speakBtn = document.getElementById('spelling-speak-btn');
+            const progressEl = document.getElementById('spelling-progress');
+
+            let deck = [...flashcards];
+            let currentIndex = 0;
+            let currentWord = null;
+            let currentDefinition = null;
+            let revealed = [];
+
+            function shuffleDeck() {
+                for (let i = deck.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [deck[i], deck[j]] = [deck[j], deck[i]];
+                }
+            }
+
+            function showCard() {
+                window.speechSynthesis.cancel();
+                currentWord = deck[currentIndex].word;
+                currentDefinition = deck[currentIndex].definition;
+                definitionEl.textContent = currentDefinition;
+                inputEl.value = '';
+                inputEl.classList.remove('correct');
+                inputEl.disabled = false;
+                messageEl.textContent = '';
+                successMessageEl.classList.add('hidden');
+                revealed = Array(currentWord.length).fill('');
+                progressEl.textContent = `${currentIndex + 1} / ${deck.length}`;
+                inputEl.maxLength = currentWord.length;
+                inputEl.focus();
+            }
+
+            function checkAnswer(e) {
+                e.preventDefault();
+                const userInput = inputEl.value.trim().toUpperCase();
+                if (userInput === currentWord.toUpperCase()) {
+                    inputEl.classList.add('correct');
+                    inputEl.disabled = true;
+                    messageEl.textContent = '';
+                    successMessageEl.classList.remove('hidden');
+                    setTimeout(() => {
+                        successMessageEl.classList.add('hidden');
+                        showNext();
+                    }, 1200);
+                } else {
+                    messageEl.textContent = '拼写不正确，请再试一次！';
+                }
+            }
+
+            function showNext() {
+                currentIndex = (currentIndex + 1) % deck.length;
+                showCard();
+            }
+
+            function showHint() {
+                // 显示一个未揭示的字母
+                let unrevealed = [];
+                for (let i = 0; i < currentWord.length; i++) {
+                    if (!revealed[i]) unrevealed.push(i);
+                }
+                if (unrevealed.length === 0) return;
+                let idx = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+                revealed[idx] = currentWord[idx];
+                let hintArr = inputEl.value.toUpperCase().split('');
+                while (hintArr.length < currentWord.length) hintArr.push('');
+                hintArr[idx] = currentWord[idx];
+                inputEl.value = hintArr.join('');
+            }
+
+            function speakWord() {
+                speakText(currentWord);
+            }
+
+            form.addEventListener('submit', checkAnswer);
+            nextBtn.addEventListener('click', showNext);
+            hintBtn.addEventListener('click', showHint);
+            speakBtn.addEventListener('click', speakWord);
+            shuffleDeck();
+            showCard();
+        }
+
+        // --- Initial Load ---
+        showFlashcardApp();
+
+        function initFlashcard() {
+            const flashcardEl = document.getElementById('flashcard');
+            const wordEl = document.getElementById('word');
+            const definitionEl = document.getElementById('definition');
+            const progressEl = document.getElementById('progress');
+            const prevBtn = document.getElementById('prev-btn');
+            const nextBtn = document.getElementById('next-btn');
+            const shuffleBtn = document.getElementById('shuffle-btn');
+            const speakWordBtn = document.getElementById('speak-word-btn');
+            const speakDefinitionBtn = document.getElementById('speak-definition-btn');
+
+            let currentDeck = [...flashcards];
+            let currentIndex = 0;
+
+            function updateCard() {
+                window.speechSynthesis.cancel();
+                const card = currentDeck[currentIndex];
+                wordEl.textContent = card.word;
+                definitionEl.textContent = card.definition;
+                progressEl.textContent = `${currentIndex + 1} / ${currentDeck.length}`;
+                if (flashcardEl.classList.contains('is-flipped')) {
+                    flashcardEl.classList.remove('is-flipped');
+                }
+            }
+
+            function showNextCard() { currentIndex = (currentIndex + 1) % currentDeck.length; updateCard(); }
+            function showPrevCard() { currentIndex = (currentIndex - 1 + currentDeck.length) % currentDeck.length; updateCard(); }
+            function shuffleDeck() {
+                for (let i = currentDeck.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [currentDeck[i], currentDeck[j]] = [currentDeck[j], currentDeck[i]];
+                }
+                currentIndex = 0; updateCard();
+            }
+
+            flashcardEl.addEventListener('click', () => flashcardEl.classList.toggle('is-flipped'));
+            speakWordBtn.addEventListener('click', e => { e.stopPropagation(); speakText(wordEl.textContent); });
+            speakDefinitionBtn.addEventListener('click', e => { e.stopPropagation(); speakText(definitionEl.textContent); });
+            nextBtn.addEventListener('click', showNextCard);
+            prevBtn.addEventListener('click', showPrevCard);
+            shuffleBtn.addEventListener('click', shuffleDeck);
+            updateCard();
+        }
+    </script>
+</body>
+</html>
